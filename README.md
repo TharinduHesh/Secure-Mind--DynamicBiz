@@ -154,9 +154,14 @@ firebase deploy --only hosting:web,functions,firestore:rules,storage
 
 This project is private and proprietary.
 
-## 👥 Contributing
+## 👥 Contributors
 
-This is a private project. Contact the repository owner for collaboration opportunities.
+This project was developed by:
+
+- **Tharindu Ranasinghe**
+- **Bhanuka Rathnayake**
+- **Suhas Bandara**
+- **Kavindu Liyanage**
 
 ---
 
