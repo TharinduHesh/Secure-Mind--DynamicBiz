@@ -2,6 +2,10 @@
 
 A comprehensive security awareness and training platform with role-based access control, interactive games, incident reporting, and policy management. Built with React and Firebase for real-time collaboration and security compliance.
 
+## 🎥 Demo Video
+
+Watch the full demonstration: [SecureMind Demo Video](https://mysliit-my.sharepoint.com/:v:/g/personal/it23269484_my_sliit_lk/IQBFi3lQPaQ7SJoXiBaZw7h4AVWNSKuvDoABkAiLA3Rg27M?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=7ICbVq)
+
 ## 🚀 Features
 
 - **Role-Based Dashboards**: Customized interfaces for Admin, Security, Accounting, Marketing, Developer, and Design teams
@@ -146,4 +150,14 @@ firebase deploy --only hosting:web,functions,firestore:rules,storage
 - **Secure Storage Rules**: File access based on user roles
 - **Email Verification**: Required for account activation
 
+## 📝 License
 
+This project is private and proprietary.
+
+## 👥 Contributing
+
+This is a private project. Contact the repository owner for collaboration opportunities.
+
+---
+
+**Built with ❤️ for enhanced security awareness and compliance**
