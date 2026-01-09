@@ -1,0 +1,379 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    // ---- Helpers -----------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    // Enhanced admin check - supports multiple admin-level roles
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        request.auth.token.role == "admin" ||
+        // Fallback: check users/{uid}.role
+        (exists(/databases/$(db)/documents/users/$(uid())) &&
+          get(/databases/$(db)/documents/users/$(uid())).data.role == "admin")
+      );
+    }
+
+    // Enhanced trainer check - trainers have elevated permissions
+    function isTrainer() {
+      return isSignedIn() && (
+        request.auth.token.trainer == true ||
+        request.auth.token.role == "trainer" ||
+        (exists(/databases/$(db)/documents/users/$(uid())) &&
+          get(/databases/$(db)/documents/users/$(uid())).data.role == "trainer")
+      );
+    }
+
+    // Check if user has security role (for security-related permissions)
+    function isSecurity() {
+      return isSignedIn() && (
+        request.auth.token.role == "security" ||
+        (exists(/databases/$(db)/documents/users/$(uid())) &&
+          get(/databases/$(db)/documents/users/$(uid())).data.role == "security")
+      );
+    }
+
+    // Check if user has elevated permissions (admin, trainer, or security)
+    function hasElevatedPermissions() {
+      return isAdmin() || isTrainer() || isSecurity();
+    }
+
+    // Get role of the current user - safe function that handles missing data
+    function userRole() {
+      return isSignedIn() && exists(/databases/$(db)/documents/users/$(uid()))
+        ? get(/databases/$(db)/documents/users/$(uid())).data.get('role', 'user')
+        : 'user';
+    }
+
+    // Valid roles check
+    function isValidRole(role) {
+      return role in ["admin", "trainer", "security", "accounting", "marketing", "developer", "design", "user"];
+    }
+
+    // Safely check if list contains value - handles null/missing lists
+    function listContains(lst, val) {
+      return lst != null && lst is list && val in lst;
+    }
+
+    // Check if user is targeted by a policy/assignment based on roles array
+    function isTargetedByRoles(roles) {
+      return roles != null && roles is list && (
+        'accounting' in roles || 
+        'Accounting' in roles || 
+        'accountant' in roles ||
+        'Accountant' in roles ||
+        userRole() in roles ||
+        userRole().toLowerCase() in roles
+      );
+    }
+
+    // More flexible role checking for accounting users
+    function isAccountingUser() {
+      let role = userRole().toLowerCase();
+      return role == 'accounting' || role == 'accountant';
+    }
+
+    // ---- app_settings/{settingId} ------------------------------------------
+    // System settings
+    // - Allow anyone to get the single "system" document so public pages (e.g. registration)
+    //   can read password policy and domain restrictions needed for client-side validation.
+    // - Listing other app_settings documents is still blocked. Only admins can create/update/delete.
+    match /app_settings/{settingId} {
+      allow get: if settingId == "system";              // allow unauthenticated GET for /app_settings/system
+      allow read: if isAdmin();                            // admins may read other settings
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- employees/{employeeId} --------------------------------------------
+    match /employees/{employeeId} {
+      // Allow unauthenticated GET of a single employee record for registration validation
+      // Still block list queries. Admins can read everything.
+      allow get: if true;                               // Explicit unauthenticated access
+      allow list: if isAdmin();
+      
+      // Only admin can create, update, delete employee records
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- users/{uid} -------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isAdmin() || (isSignedIn() && userId == uid());
+
+      // Admin can create/update/disable/delete any user doc
+      allow create, update, delete: if isAdmin();
+
+      // Users can create their own profile during registration
+      // Client is not allowed to set role; role comes from backend trigger
+      allow create: if isSignedIn() && userId == uid() &&
+        request.resource.data.uid == uid() &&
+        !('role' in request.resource.data) &&
+        // Allow createdAt as request.time, a timestamp, or simply present (to permit serverTimestamp sentinels)
+        (
+          !(request.resource.data.keys().hasAny(['createdAt'])) ||
+          request.resource.data.createdAt == request.time ||
+          request.resource.data.createdAt is timestamp ||
+          request.resource.data.keys().hasAny(['createdAt'])
+        );
+
+      // Allow a user to update ONLY a limited set of self-profile fields
+      allow update: if isSignedIn() && userId == uid() &&
+        // limit fields a self-user can change
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "displayName",
+          "photoURL", 
+          "phone",
+          "employeeName",
+          "mfaEnrolled",
+          "updatedAt"
+        ]) &&
+        // prevent privilege escalation: cannot change role/disabled, etc.
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.get("disabled", false) == resource.data.get("disabled", false);
+
+      // Admin bulk operations - allow batch updates for role changes and enable/disable
+      allow update: if isAdmin() &&
+        // Only allow changing these specific fields during bulk operations
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "role",
+          "disabled", 
+          "updatedAt"
+        ]) &&
+        // Ensure valid role if role is being changed
+        (request.resource.data.role == resource.data.role || isValidRole(request.resource.data.role));
+    }
+
+    // ---- policies/{policyId} ----------------------------------------------
+    match /policies/{policyId} {
+      // Allow read for admins always, for users only if published
+      allow read: if isAdmin() || (isSignedIn() && 
+        resource.data.status == "published"
+      );
+
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- policy_acks/{ackId} ----------------------------------------------
+    match /policy_acks/{ackId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == uid());
+
+      // Users can create and update their own acknowledgments
+      allow create, update: if isSignedIn() &&
+        request.resource.data.userId == uid() &&
+        request.resource.data.policyId is string &&
+        request.resource.data.acknowledgedAt != null;
+
+      allow delete: if isAdmin();
+    }
+
+    // ---- facts/{factId} ----------------------------------------------------
+    match /facts/{factId} {
+      // Any signed-in user can read facts/notifications
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- fact_reads/{readId} -----------------------------------------------
+    match /fact_reads/{readId} {
+      // Users can read their own fact reads, admins can read all
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == uid());
+
+      // Users can create their own fact reads
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == uid() &&
+        request.resource.data.factId is string &&
+        request.resource.data.readAt != null;
+
+      // Users can update their own fact reads, admins can update any
+      allow update: if isAdmin() || (isSignedIn() && resource.data.userId == uid());
+
+      // Only admins can delete fact reads
+      allow delete: if isAdmin();
+    }
+
+    // ---- notifications/{notifId} ------------------------------------------
+    match /notifications/{notifId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == uid());
+      allow create, update, delete: if isAdmin() || isTrainer();
+    }
+
+    // ---- quizzes/{quizId} --------------------------------------------------
+    match /quizzes/{quizId} {
+      // Users can read published quizzes, elevated users can read all
+      allow read: if hasElevatedPermissions() || (isSignedIn() && 
+        resource.data.get("published", false) == true
+      );
+
+      // Trainers and admins can manage quizzes
+      allow create, update, delete: if isAdmin() || isTrainer();
+    }
+
+    // ---- quiz_assignments/{assignId} --------------------------------------
+    match /quiz_assignments/{assignId} {
+      // All authenticated users can read quiz assignments - filtering happens in the app
+      allow read: if isSignedIn();
+
+      // Only trainers/admins create/update/delete assignments
+      allow create: if (isAdmin() || isTrainer()) &&
+        request.resource.data.quizId is string &&
+        request.resource.data.targetType in ["all","roles","users"] &&
+        (request.resource.data.targetType != "roles" || request.resource.data.roles is list) &&
+        (request.resource.data.targetType != "users" || request.resource.data.userIds is list) &&
+        ( !("dueDate" in request.resource.data) || request.resource.data.dueDate == null || request.resource.data.dueDate is timestamp ) &&
+        request.resource.data.createdAt is timestamp &&
+        request.resource.data.createdBy == uid();
+
+      allow update, delete: if isAdmin() || isTrainer();
+    }
+
+    // ---- quiz_results/{resultId} ------------------------------------------
+    match /quiz_results/{resultId} {
+      // Elevated users can read all; user can read their own
+      allow read: if hasElevatedPermissions() || (isSignedIn() && resource.data.userId == uid());
+
+      // Users can create results only for themselves
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == uid() &&
+        request.resource.data.quizId is string &&
+        request.resource.data.createdAt != null;
+
+      // Users can update their own results, elevated users can update any
+      allow update: if hasElevatedPermissions() || 
+        (isSignedIn() && resource.data.userId == uid());
+
+      // Only elevated users can delete results
+      allow delete: if hasElevatedPermissions();
+    }
+
+    // ---- game_results/{resultId} ------------------------------------------
+    match /game_results/{resultId} {
+      // Elevated users can read all; user can read their own
+      allow read: if hasElevatedPermissions() || (isSignedIn() && resource.data.userId == uid());
+
+      // Users can create results only for themselves
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == uid() &&
+        request.resource.data.gameType is string &&
+        request.resource.data.createdAt != null;
+
+      // Users can update their own results, elevated users can update any
+      allow update: if hasElevatedPermissions() || 
+        (isSignedIn() && resource.data.userId == uid());
+
+      // Only elevated users can delete results
+      allow delete: if hasElevatedPermissions();
+    }
+
+    // ---- quiz_attempts/{attemptId} ----------------------------------------
+    // Legacy collection - keeping for backward compatibility
+    match /quiz_attempts/{attemptId} {
+      allow read: if hasElevatedPermissions() || (isSignedIn() && resource.data.userId == uid());
+
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == uid() &&
+        request.resource.data.quizId is string &&
+        request.resource.data.createdAt is timestamp;
+
+      allow update: if isSignedIn() &&
+        resource.data.userId == uid() &&
+        (
+          (resource.data.get('submittedAt', null) == null &&
+            request.resource.data.userId == resource.data.userId
+          )
+          ||
+          (resource.data.get('submittedAt', null) == null &&
+            request.resource.data.submittedAt is timestamp &&
+            request.resource.data.userId == resource.data.userId
+          )
+        );
+
+      allow update: if hasElevatedPermissions();
+      allow delete: if hasElevatedPermissions();
+    }
+
+    // ---- trainings/{trainingId} -------------------------------------------
+    match /trainings/{trainingId} {
+      allow read: if hasElevatedPermissions() || (isSignedIn() &&
+        resource.data.get('published', false) == true
+      );
+
+      allow create, update, delete: if isAdmin() || isTrainer();
+    }
+
+    // ---- reports/{reportId} -----------------------------------------------
+    match /reports/{reportId} {
+      allow read, create, update, delete: if hasElevatedPermissions();
+    }
+
+    // ---- audit_logs/{logId} -----------------------------------------------
+    match /audit_logs/{logId} {
+      allow read: if hasElevatedPermissions();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ---- incidents/{incidentId} -------------------------------------------
+    match /incidents/{incidentId} {
+      // Admins can read all incidents, users can only read their own
+      allow read: if isAdmin() || (isSignedIn() && resource.data.reporterId == uid());
+
+      // Any authenticated user can create incident reports
+      allow create: if isSignedIn() &&
+        request.resource.data.reporterId == uid() &&
+        request.resource.data.reporterEmail == request.auth.token.email &&
+        request.resource.data.title is string &&
+        request.resource.data.incidentType is string &&
+        request.resource.data.severity in ["low", "medium", "high", "critical"] &&
+        request.resource.data.description is string &&
+        request.resource.data.status == "submitted" &&
+        request.resource.data.submittedAt != null &&
+        request.resource.data.createdAt != null &&
+        request.resource.data.updatedAt != null &&
+        request.resource.data.incidentNumber is string;
+
+      // Admins can update incidents (status changes, reviews, etc.)
+      allow update: if isAdmin();
+
+      // Reporters may perform very limited updates on their own incidents:
+      // - Add or modify their own reporterNotes
+      // - Update updatedAt timestamp
+      // - Confirm closure: allow status transition from resolved -> closed
+      allow update: if isSignedIn() && resource.data.reporterId == uid() &&
+        // Only allow these keys to change for reporters
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "reporterNotes",
+          "status",
+          "updatedAt"
+        ]) &&
+        // reporterNotes, if present, must be a string (or removed)
+        (
+          !("reporterNotes" in request.resource.data) ||
+          request.resource.data.reporterNotes is string ||
+          request.resource.data.reporterNotes == null
+        ) &&
+        // Allow status change only when confirming closure (resolved -> closed).
+        // If status is present and changed, enforce this specific transition.
+        (
+          !("status" in request.resource.data) ||
+          request.resource.data.status == resource.data.status ||
+          (
+            resource.data.status == "resolved" &&
+            request.resource.data.status == "closed"
+          )
+        );
+
+      // Only admins can delete incidents
+      allow delete: if isAdmin();
+    }
+
+    // Fallback deny rule for any other collections not explicitly handled
+  }
+}

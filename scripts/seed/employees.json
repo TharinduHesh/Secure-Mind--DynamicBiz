@@ -1,0 +1,92 @@
+[
+  {
+    "employeeId": "AD003",
+    "fullName": "Isuru Chandimal",
+    "email": "yczs3fyl@anonaddy.me",
+    "role": "admin",
+    "department": "Administration",
+    "team": "Core Admin",
+    "isActive": true
+  },
+  {
+    "employeeId": "AD004",
+    "fullName": "Kavindu Liyanage",
+    "email": "Kavindu@hellodynamicbiz.com",
+    "role": "admin",
+    "department": "Administration",
+    "team": "Core Admin",
+    "isActive": true
+  },
+  {
+    "employeeId": "MK006",
+    "fullName": "Vihara Karunathilake",
+    "email": "viharakaru@proton.me",
+    "role": "marketing",
+    "department": "Marketing",
+    "team": "Promotion & Outreach",
+    "isActive": true
+  },
+  {
+    "employeeId": "DV006",
+    "fullName": "Kanishka Medhankara",
+    "email": "kanishkamedh@proton.me",
+    "role": "developer",
+    "department": "Engineering",
+    "team": "Fullstack",
+    "isActive": true
+  },
+  {
+    "employeeId": "DV007",
+    "fullName": "Neranjana Prasad",
+    "email": "0ncaz84y@anonaddy.me",
+    "role": "developer",
+    "department": "Engineering",
+    "team": "Backend",
+    "isActive": true
+  },
+  {
+    "employeeId": "DC006",
+    "fullName": "Isira Abeyrathne",
+    "email": "isiraabe@proton.me",
+    "role": "design",
+    "department": "Design & Content",
+    "team": "Editor",
+    "isActive": true
+  },
+  {
+    "employeeId": "DC007",
+    "fullName": "Theekshana Sankalpa",
+    "email": "xk41p43z@anonaddy.me",
+    "role": "design",
+    "department": "Design & Content",
+    "team": "UI/UX",
+    "isActive": true
+  },
+  {
+    "employeeId": "AC006",
+    "fullName": "Gamini Harendre",
+    "email": "GaminiHarendre@proton.me",
+    "role": "accounting",
+    "department": "Accounting",
+    "team": "Payables",
+    "isActive": true
+  },
+  {
+    "employeeId": "SE001",
+    "fullName": "Suhas Bandara",
+    "email": "suhasban@proton.me",
+    "role": "security",
+    "department": "Security",
+    "team": "Blue Team",
+    "isActive": true
+  },
+  {
+    "employeeId": "SE002",
+    "fullName": "Wasantha Kumara",
+    "email": "3u6fhe7l@anonaddy.me",
+    "role": "security",
+    "department": "Security",
+    "team": "Blue Team",
+    "isActive": true
+  }
+]
