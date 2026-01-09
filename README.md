@@ -146,14 +146,4 @@ firebase deploy --only hosting:web,functions,firestore:rules,storage
 - **Secure Storage Rules**: File access based on user roles
 - **Email Verification**: Required for account activation
 
-## 📝 License
 
-This project is private and proprietary.
-
-## 👥 Contributing
-
-This is a private project. Contact the repository owner for collaboration opportunities.
-
----
-
-**Built with ❤️ for enhanced security awareness and compliance**
